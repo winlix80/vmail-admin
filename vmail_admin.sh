@@ -238,6 +238,13 @@ read_domain()
 	printline
 }
 
+read_note()
+{
+	echo "Enter note:"
+	read note
+	printline
+}
+
 switch_case_submenu()
 {
 	case "$1" in
@@ -303,6 +310,7 @@ read_alias_input()
 	echo "Type destination domain:"
 	read destination_domain
 	echo "Using $destination_username@$destination_domain as destination address."
+	read_note
 }
 ####################################################################
 ###################  Database functions  ###########################
@@ -364,7 +372,7 @@ init_database()
 		echo "Returning to menu."
 		printline
 		database_menu
-  else
+    else
 		mysql -u $database_user -e "create database $database_name CHARACTER SET 'utf8';";
 		echo "Database $database_name created!"
 
@@ -385,12 +393,12 @@ init_database()
 		mysql -u $database_user -D $database_name -e "CREATE TABLE domains ( id int unsigned NOT NULL AUTO_INCREMENT, domain varchar(255) NOT NULL, PRIMARY KEY (id),UNIQUE KEY (domain));"
 
 		mysql -u $database_user -D $database_name -e "CREATE TABLE accounts ( id int unsigned NOT NULL AUTO_INCREMENT, username varchar(64) NOT NULL,
-		domain varchar(255) NOT NULL, password varchar(255) NOT NULL, quota int unsigned DEFAULT '0', enabled boolean DEFAULT '0', sendonly boolean DEFAULT '0',
+		domain varchar(255) NOT NULL, password varchar(255) NOT NULL, quota int unsigned DEFAULT '0', enabled boolean DEFAULT '0', sendonly boolean DEFAULT '0', note text DEFAULT NULL,
 		PRIMARY KEY (id), UNIQUE KEY (username, domain), FOREIGN KEY (domain) REFERENCES domains (domain));"
 
-		mysql -u $database_user -D $database_name -e "CREATE TABLE aliases ( id int unsigned NOT NULL AUTO_INCREMENT, source_username varchar(64) NOT NULL, source_domain varchar(255) NOT NULL,
-		destination_username varchar(64) NOT NULL, destination_domain varchar(255) NOT NULL, enabled boolean DEFAULT '0', PRIMARY KEY (id),
-		UNIQUE KEY (source_username, source_domain, destination_username, destination_domain), FOREIGN KEY (source_domain) REFERENCES domains (domain));"
+		mysql -u $database_user -D $database_name -e "CREATE TABLE aliases ( id int unsigned NOT NULL AUTO_INCREMENT, source_username varchar(64) NOT NULL, 
+		source_domain varchar(255) NOT NULL, destination_username varchar(64) NOT NULL, destination_domain varchar(255) NOT NULL, enabled boolean DEFAULT '0', note text DEFAULT NULL, 
+		PRIMARY KEY (id), UNIQUE KEY (source_username, source_domain, destination_username, destination_domain), FOREIGN KEY (source_domain) REFERENCES domains (domain));"
 
 		mysql -u $database_user -D $database_name -e "CREATE TABLE tlspolicies ( id int unsigned NOT NULL AUTO_INCREMENT, domain varchar(255) NOT NULL,
 		policy enum('none', 'may', 'encrypt', 'dane', 'dane-only', 'fingerprint', 'verify', 'secure') NOT NULL, params varchar(255), PRIMARY KEY (id), UNIQUE KEY (domain));"
@@ -407,7 +415,7 @@ add_alias()
 {
 	check_database_exists
 	read_alias_input
-	mysql -u $database_user -D $database_name -e "insert into aliases (source_username, source_domain, destination_username, destination_domain, enabled) values ('$source_username', '$source_domain', '$destination_username', '$destination_domain', true);"
+	mysql -u $database_user -D $database_name -e "insert into aliases (source_username, source_domain, destination_username, destination_domain, enabled, note) values ('$source_username', '$source_domain', '$destination_username', '$destination_domain', true, '$note');"
 	echo "Alias $source_username@$source_domain -> $destination_username@$destination_domain has been added"
 	aliases_menu
 }
@@ -466,7 +474,7 @@ show_all_user()
 		echo "No Users in database!"
 		user_menu
 	else
-		mysql -u $database_user -D $database_name -e "select id, username, domain, quota, enabled, sendonly from accounts;"
+		mysql -u $database_user -D $database_name -e "select id, username, domain, quota, enabled, sendonly, note from accounts;"
 		user_menu
 	fi
 }
@@ -476,6 +484,7 @@ add_user()
 	check_database_exists
 	read_username
 	read_domain
+	read_note
 	check_domain_exists $domain "user_menu"
 	check_user_not_existing $username $domain "user_menu"
 
@@ -483,7 +492,7 @@ add_user()
 
 	hash=`doveadm pw -s SHA512-CRYPT`
 
-	mysql -u $database_user -D $database_name -e "insert into accounts (username, domain, password, quota, enabled, sendonly) values ('$username', '$domain', '$hash', '$new_user_quota', '$new_user_enabled', '$new_user_sendonly');"
+	mysql -u $database_user -D $database_name -e "insert into accounts (username, domain, password, quota, enabled, sendonly, note) values ('$username', '$domain', '$hash', '$new_user_quota', '$new_user_enabled', '$new_user_sendonly', '$note');"
 
 	printline
 	echo "User $username@$domain has been added!"
