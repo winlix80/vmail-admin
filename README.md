@@ -1,20 +1,13 @@
 # vmail-admin
-CLI Tool for managing vmail databases
 
 `vmail-admin` is a command line tool for managing a mail-server database
 based on the great [HowTo](https://thomas-leister.de/en/mailserver-debian-stretch) ([german version](https://thomas-leister.de/mailserver-debian-stretch/))
-from [Thomas Leister](https://thomas-leister.de) written in Bash.
-
-## Prerequisites
-
-Make sure you have a working setup as described in the tutorial as `vmail-admin`
-relies on the described database scheme (MySQL or MariaDB).
-
-Further, as `vmail-admin` is written in Bash, you should have bash installed.
+from [Thomas Leister](https://thomas-leister.de) written in Bash. 
+The databses is extended for field notes in accounts and aliases.
 
 # Installation
 
-* Download vmail-admin.sh from github.
+* Download vmail-admin.sh.
 * Make it executable with "chmod +x vmail-admin.sh".
 * Run it with "./vmail-admin.sh".
 
@@ -36,7 +29,9 @@ Menu items are:
     3. Show all user
     4. Change user password
     5. Change user quota
-    6. Back to main menu
+    6. Change user sendonly
+    7. Enable/Disable user
+    8. Back to main menu
 2. Domain Management
     1. Add Domain
     2. Delete Domain
@@ -48,7 +43,7 @@ Menu items are:
     2. Delete alias
     3. Show aliases for domain
     4. Show all aliases
-    5. Back to main menu  
+    5. Back to main menu
 4. Database Management
     1. Export database as sql.gz
     2. Import database from sql.gz
@@ -56,13 +51,3 @@ Menu items are:
     4. Initialize database
     5. Back to main menu
 5. Exit
-
-
-# How to contribute
-
-Create new issues if you find bugs or want to add new features. Pull requests are
-very welcome.
-
-# License
-
-Copyright (C) 2018 by Patrick Prugger

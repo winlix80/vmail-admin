@@ -2,16 +2,21 @@
 
 ###################################################
 ################  DEFINITIONS  ####################
-database_name=vmail
-database_user=root
-new_user_quota=2048 #in MB
+database_name=vmail # Name of the databse which will be created or used if it still exists 
+database_user=vmail	# Username for the "vmail" database ( should not be "root" for security reason or dont save pwd for "root" here )
+database_pwd=vmail	# Password for the User
+new_user_quota=2048 # Quote in MB
 new_user_enabled=1
 new_user_sendonly=0
 max_quota=4096 #in MB
-init_database_user=vmail #User which will read the database
-
+init_database_user=root #User for create database ( most of time will be root )
+init_database_pwd=		#leave empty if you want to put the password in the prompt
 ###################################################
-################  MENUS  ##########################
+#################  COMMANDS  ######################
+mysqlcmd="mysql -u $database_user -p${database_pwd} -D $database_name"
+mysqlcmdinit="mysql -u $init_database_user -p${init_database_pwd}"
+###################################################
+##################  MENUS  ########################
 menu()
 {
 	printline
@@ -238,6 +243,13 @@ read_domain()
 	printline
 }
 
+read_note()
+{
+	echo "Enter note:"
+	read note
+	printline
+}
+
 switch_case_submenu()
 {
 	case "$1" in
@@ -265,7 +277,7 @@ switch_case_submenu()
 
 check_user_exists()
 {
-	user_exists=`mysql -u $database_user -D $database_name -e "select * from accounts where username='$1' and domain='$2';"`
+	user_exists=`$mysqlcmd -e "select * from accounts where username='$1' and domain='$2';"`
 	if [ "$user_exists" == "" ]; then
 		echo "User $1@$2 doesn't exist in database!"
 		switch_case_submenu $3
@@ -274,7 +286,7 @@ check_user_exists()
 
 check_user_not_existing()
 {
-	user_exists=`mysql -u $database_user -D $database_name -e "select * from accounts where username='$1' and domain='$2';"`
+	user_exists=`$mysqlcmd -e "select * from accounts where username='$1' and domain='$2';"`
 	if [ "$user_exists" != "" ]; then
 		echo "User $1@$2 doesn't exist in database!"
 		switch_case_submenu $3
@@ -283,7 +295,7 @@ check_user_not_existing()
 
 check_domain_exists()
 {
-	domain_exists=`mysql -u $database_user -D $database_name -e "select * from domains where domain='$1';"`
+	domain_exists=`$mysqlcmd -e "select * from domains where domain='$1';"`
 	if [ "$domain_exists" == "" ]; then
 		echo "Domain $1 doesn't exist in database!"
 		switch_case_submenu $2
@@ -303,14 +315,15 @@ read_alias_input()
 	echo "Type destination domain:"
 	read destination_domain
 	echo "Using $destination_username@$destination_domain as destination address."
+	read_note
 }
+
 ####################################################################
 ###################  Database functions  ###########################
-
 export_database()
 {
 	check_database_exists
-	mysqldump -u $database_user -p$database_password $database_name | gzip > $database_name-export.sql.gz
+	mysqldump -u $init_database_user -p${init_database_pwd}  $database_name | gzip > $database_name-export.sql.gz
 	echo "Database has been exported as $database_name-export.sql.gz"
 	database_menu
 }
@@ -318,10 +331,10 @@ export_database()
 import_database()
 {
 
-	database_exists=`mysql -e "show databases like '$database_name';"`
+	database_exists=`$mysqlcmd -e "show databases like '$database_name';"`
 	if [ "$database_exists" == "" ]; then
 		echo "Seems the database $database_name doesn't exist. Creating..."
-		mysql -u $database_user -e "create database $database_name CHARACTER SET 'utf8';";
+		$mysqlcmdinit -e "create database $database_name CHARACTER SET 'utf8';";
 	else
 		echo "Are you sure you want to import into database $database_name?"
 		echo "All contents of the database will be overwritten. Enter \"YES\""
@@ -335,14 +348,14 @@ import_database()
 
 	echo "Type path to file that you want to import:"
 	read import_database_filename
-	gunzip < $import_database_filename  | mysql -u $database_user $database_name
+	gunzip < $import_database_filename  | $mysqlcmdinit -D $database_name
 	echo "Database $database_name has been created and imported!"
 	database_menu
 }
 
 delete_database()
 {
-	database_exists=`mysql -e "show databases like '$database_name';"`
+	database_exists=`$mysqlcmd -e "show databases like '$database_name';"`
 	if [ "$database_exists" != "" ]; then
 		echo "Are you sure you want to delete database $database_name? Type \"YES\""
 		read ack
@@ -350,7 +363,7 @@ delete_database()
 			echo "Aborting!"
 			database_menu
 		fi
-		mysql -u $database_user -e "drop database $database_name";
+		$mysqlcmdinit -e "drop database $database_name";
 		echo "Deleted database $database_name!"
 	fi
 	database_menu
@@ -358,41 +371,41 @@ delete_database()
 
 init_database()
 {
-	database_exists=`mysql -e "show databases like '$database_name';"`
+	database_exists=`$mysqlcmdinit -e "show databases like '$database_name';"`
 	if [ "$database_exists" != "" ]; then
 		echo "The database allready exists!"
 		echo "Returning to menu."
 		printline
 		database_menu
-  else
-		mysql -u $database_user -e "create database $database_name CHARACTER SET 'utf8';";
+    else
+		$mysqlcmdinit -e "create database $database_name CHARACTER SET 'utf8';";
 		echo "Database $database_name created!"
 
 		for (( ; ; ))
 		do
-			echo "Please type password for new database user $init_database_user:"
+			echo "Please type password for new database user $database_user:"
 			read -s init_database_password
 			echo "Please retype password:"
 			read -s init_database_password_check
 			if [ "$init_database_password" == "$init_database_password_check" ]; then
-				mysql -u $database_user -e "grant select on $database_name.* to '$init_database_user'@'localhost' identified by '$init_database_password';"
-				echo "Acces for user $init_database_user granted!"
+				$mysqlcmdinit -e "grant select, insert, delete, update on $database_name.* to '$database_user'@'localhost' identified by '$init_database_password';"
+				echo "Acces for user $database_user granted!"
 				break
 			else
 				echo "Passwords don't match!"
 			fi
 		done
-		mysql -u $database_user -D $database_name -e "CREATE TABLE domains ( id int unsigned NOT NULL AUTO_INCREMENT, domain varchar(255) NOT NULL, PRIMARY KEY (id),UNIQUE KEY (domain));"
+		$mysqlcmdinit -D $database_name -e "CREATE TABLE domains ( id int unsigned NOT NULL AUTO_INCREMENT, domain varchar(255) NOT NULL, PRIMARY KEY (id),UNIQUE KEY (domain));"
 
-		mysql -u $database_user -D $database_name -e "CREATE TABLE accounts ( id int unsigned NOT NULL AUTO_INCREMENT, username varchar(64) NOT NULL,
-		domain varchar(255) NOT NULL, password varchar(255) NOT NULL, quota int unsigned DEFAULT '0', enabled boolean DEFAULT '0', sendonly boolean DEFAULT '0',
+		$mysqlcmdinit -D $database_name -e "CREATE TABLE accounts ( id int unsigned NOT NULL AUTO_INCREMENT, username varchar(64) NOT NULL,
+		domain varchar(255) NOT NULL, password varchar(255) NOT NULL, quota int unsigned DEFAULT '0', enabled boolean DEFAULT '0', sendonly boolean DEFAULT '0', note text DEFAULT NULL,
 		PRIMARY KEY (id), UNIQUE KEY (username, domain), FOREIGN KEY (domain) REFERENCES domains (domain));"
 
-		mysql -u $database_user -D $database_name -e "CREATE TABLE aliases ( id int unsigned NOT NULL AUTO_INCREMENT, source_username varchar(64) NOT NULL, source_domain varchar(255) NOT NULL,
-		destination_username varchar(64) NOT NULL, destination_domain varchar(255) NOT NULL, enabled boolean DEFAULT '0', PRIMARY KEY (id),
-		UNIQUE KEY (source_username, source_domain, destination_username, destination_domain), FOREIGN KEY (source_domain) REFERENCES domains (domain));"
+		$mysqlcmdinit -D $database_name -e "CREATE TABLE aliases ( id int unsigned NOT NULL AUTO_INCREMENT, source_username varchar(64) NOT NULL, 
+		source_domain varchar(255) NOT NULL, destination_username varchar(64) NOT NULL, destination_domain varchar(255) NOT NULL, enabled boolean DEFAULT '0', note text DEFAULT NULL, 
+		PRIMARY KEY (id), UNIQUE KEY (source_username, source_domain, destination_username, destination_domain), FOREIGN KEY (source_domain) REFERENCES domains (domain));"
 
-		mysql -u $database_user -D $database_name -e "CREATE TABLE tlspolicies ( id int unsigned NOT NULL AUTO_INCREMENT, domain varchar(255) NOT NULL,
+		$mysqlcmdinit -D $database_name -e "CREATE TABLE tlspolicies ( id int unsigned NOT NULL AUTO_INCREMENT, domain varchar(255) NOT NULL,
 		policy enum('none', 'may', 'encrypt', 'dane', 'dane-only', 'fingerprint', 'verify', 'secure') NOT NULL, params varchar(255), PRIMARY KEY (id), UNIQUE KEY (domain));"
 
 		echo "Database $database_name created and initialized."
@@ -402,12 +415,13 @@ init_database()
 	database_menu
 }
 
-###Alias functions
+###################################################
+#############  Alias functions  ###################
 add_alias()
 {
 	check_database_exists
 	read_alias_input
-	mysql -u $database_user -D $database_name -e "insert into aliases (source_username, source_domain, destination_username, destination_domain, enabled) values ('$source_username', '$source_domain', '$destination_username', '$destination_domain', true);"
+	$mysqlcmd -e "insert into aliases (source_username, source_domain, destination_username, destination_domain, enabled, note) values ('$source_username', '$source_domain', '$destination_username', '$destination_domain', true, '$note');"
 	echo "Alias $source_username@$source_domain -> $destination_username@$destination_domain has been added"
 	aliases_menu
 }
@@ -421,7 +435,7 @@ delete_alias()
 	read ack
 
 	if [ "$ack" == "YES" ]; then
-		mysql -u $database_user -D $database_name -e "delete from aliases where source_username='$source_username' and source_domain='$source_domain' and destination_username='$destination_username'
+		$mysqlcmd -e "delete from aliases where source_username='$source_username' and source_domain='$source_domain' and destination_username='$destination_username'
 		and destination_domain='$destination_domain';"
 		echo "Alias deleted."
 		aliases_menu
@@ -434,25 +448,25 @@ show_alias_domain()
 	check_database_exists
 	read_domain
 	check_domain_exists $domain "aliases_menu"
-	show_alias=`mysql -u $database_user -D $database_name -e "select * from aliases where source_domain='$domain' or destination_domain='$domain';"`
+	show_alias=`$mysqlcmd -e "select * from aliases where source_domain='$domain' or destination_domain='$domain';"`
 	if [ "$show_alias" == "" ]; then
 		echo "Now aliases for that domain in database!"
 		aliases_menu
 	fi
 
-	mysql -u $database_user -D $database_name -e "select * from aliases where source_domain='$domain' or destination_domain='$domain';"
+	$mysqlcmd -e "select * from aliases where source_domain='$domain' or destination_domain='$domain';"
 	aliases_menu
 }
 
 show_all_aliases()
 {
 	check_database_exists
-	check_aliases=`mysql -u $database_user -D $database_name -e "select * from aliases;"`
+	check_aliases=`$mysqlcmd -e "select * from aliases;"`
 	if [ "$check_aliases" == "" ];then
 		echo "No aliases in database!"
 		aliases_menu
 	fi
-	mysql -u $database_user -D $database_name -e "select * from aliases;"
+	$mysqlcmd -e "select * from aliases;"
 	aliases_menu
 }
 
@@ -461,12 +475,12 @@ show_all_aliases()
 show_all_user()
 {
 	check_database_exists
-	user_exist=`mysql -u $database_user -D $database_name -e "select * from accounts;"`
+	user_exist=`$mysqlcmd -e "select * from accounts;"`
 	if [ "$user_exist" == "" ]; then
 		echo "No Users in database!"
 		user_menu
 	else
-		mysql -u $database_user -D $database_name -e "select id, username, domain, quota, enabled, sendonly from accounts;"
+		$mysqlcmd -e "select id, username, domain, quota, enabled, sendonly, note from accounts;"
 		user_menu
 	fi
 }
@@ -476,6 +490,7 @@ add_user()
 	check_database_exists
 	read_username
 	read_domain
+	read_note
 	check_domain_exists $domain "user_menu"
 	check_user_not_existing $username $domain "user_menu"
 
@@ -483,7 +498,7 @@ add_user()
 
 	hash=`doveadm pw -s SHA512-CRYPT`
 
-	mysql -u $database_user -D $database_name -e "insert into accounts (username, domain, password, quota, enabled, sendonly) values ('$username', '$domain', '$hash', '$new_user_quota', '$new_user_enabled', '$new_user_sendonly');"
+	$mysqlcmd -e "insert into accounts (username, domain, password, quota, enabled, sendonly, note) values ('$username', '$domain', '$hash', '$new_user_quota', '$new_user_enabled', '$new_user_sendonly', '$note');"
 
 	printline
 	echo "User $username@$domain has been added!"
@@ -506,7 +521,7 @@ change_pass()
 		echo "Changing password"
 		echo "Type in your new password"
 		hash=`doveadm pw -s SHA512-CRYPT`
-		mysql -u $database_user -D $database_name -e "update accounts set password='$hash' where username='$username';"
+		$mysqlcmd -e "update accounts set password='$hash' where username='$username';"
 		echo "Password of user $username@$domain changed!"
 		user_menu
 	else
@@ -531,7 +546,7 @@ delete_user()
 		user_menu
 	fi
 
-	mysql -u $database_user -D $database_name -e "delete from accounts where username='$username' and domain='$domain';"
+	$mysqlcmd -e "delete from accounts where username='$username' and domain='$domain';"
 
 	printline
 	echo "User $username@$domain deleted!"
@@ -556,7 +571,7 @@ change_quota()
 
 	printline
 	echo "Changing quota for $username@$domain to $quota MB!"
-	mysql -u $database_user -D $database_name -e "update accounts set quota='$quota' where username='$username' and domain='$domain';"
+	$mysqlcmd -e "update accounts set quota='$quota' where username='$username' and domain='$domain';"
 	user_menu
 }
 
@@ -565,12 +580,12 @@ change_quota()
 show_domains()
 {
 	check_database_exists
-	domains_exist=`mysql -u $database_user -D $database_name -e "select * from domains;"`
+	domains_exist=`$mysqlcmd -e "select * from domains;"`
 	if [ "$domains_exist" == "" ]; then
 		echo "No domains in database!"
 		domain_menu
 	else
-		mysql -u $database_user -D $database_name -e "select * from domains;"
+		$mysqlcmd -e "select * from domains;"
 		domain_menu
 	fi
 }
@@ -579,7 +594,7 @@ show_domain_users()
 {
 	read_domain
 	check_domain_exists $domain "domain_menu"
-	mysql -u $database_user -D $database_name -e "select * from accounts where domain='$domain';"
+	$mysqlcmd -e "select * from accounts where domain='$domain';"
 	domain_menu
 }
 
@@ -589,14 +604,14 @@ delete_domain()
 	read_domain
 	check_domain_exists $domain "domain_menu"
 
-	domain_user_exists=`mysql -u $database_user -D $database_name -e "select * from accounts where domain='$domain';"`
+	domain_user_exists=`$mysqlcmd -e "select * from accounts where domain='$domain';"`
 	if [ "$domain_user_exists" != "" ]; then
 		echo "There are still users for that domain!"
 		echo "Please delete those users first!"
 		domain_menu
 	fi
 
-	alias_exists=`mysql -u $database_user -D $database_name -e "select * from aliases where source_domain='$domain' or destination_domain='$domain';"`
+	alias_exists=`$mysqlcmd -e "select * from aliases where source_domain='$domain' or destination_domain='$domain';"`
 	if [ "$alias_exists" != "" ]; then
 		echo "There are still aliases for that domain!"
 		echo "Please delete those aliases first!"
@@ -611,7 +626,7 @@ delete_domain()
 		domain_menu
 	fi
 
-	mysql -u $database_user -D $database_name -e "delete from domains where domain='$domain';"
+	$mysqlcmd -e "delete from domains where domain='$domain';"
 
 	printline
 	echo "Domain $domain has been deleted!"
@@ -623,12 +638,12 @@ add_domain()
 	check_database_exists
 	read_domain
 
-	domain_exists=`mysql -u $database_user -D $database_name -e "select * from domains where domain='$domain';"`
+	domain_exists=`$mysqlcmd -e "select * from domains where domain='$domain';"`
 	if [ "$domain_exists" != "" ]; then
 		echo "Domain $domain exists!"
 		domain_menu
 	fi
-	mysql -u $database_user -D $database_name -e "insert into domains (domain) values ('$domain');"
+	$mysqlcmd -e "insert into domains (domain) values ('$domain');"
 	printline
 	echo "Domain $domain has been added"
 	domain_menu
@@ -644,7 +659,7 @@ if [ $database_user == "root" ]; then
 	fi
 fi
 
-database_exists=`mysql -e "show databases like '$database_name';"`
+database_exists=`$mysqlcmd -e "show databases like '$database_name';"`
 if [ "$database_exists" == "" ]; then
 	echo "It seems the database $database_name doesn't exist."
 	echo "You can initialize the database in the Database Management Menu"
